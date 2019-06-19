@@ -14,14 +14,27 @@
 #include <bluetooth/mesh.h>
 #include <board.h>
 #include <gpio.h>
+#include <display/mb_display.h>
 
-#include "board.h"
+// #include "board.h"
 
 /* Model Operation Codes */
 #define BT_MESH_MODEL_OP_GEN_ONOFF_GET		BT_MESH_MODEL_OP_2(0x82, 0x01)
 #define BT_MESH_MODEL_OP_GEN_ONOFF_SET		BT_MESH_MODEL_OP_2(0x82, 0x02)
 #define BT_MESH_MODEL_OP_GEN_ONOFF_SET_UNACK	BT_MESH_MODEL_OP_2(0x82, 0x03)
 #define BT_MESH_MODEL_OP_GEN_ONOFF_STATUS	BT_MESH_MODEL_OP_2(0x82, 0x04)
+
+static struct mb_image open = MB_IMAGE({ 0, 0, 1, 0, 0 },
+					 { 0, 1, 1, 0, 0 },
+					 { 0, 0, 1, 0, 0 },
+					 { 0, 0, 1, 0, 0 },
+					 { 0, 1, 1, 1, 0 });
+
+static struct mb_image close = MB_IMAGE({ 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 },
+					 { 0, 0, 0, 0, 0 });
 
 static void gen_onoff_set(struct bt_mesh_model *model,
 			  struct bt_mesh_msg_ctx *ctx,
@@ -36,7 +49,7 @@ static void gen_onoff_get(struct bt_mesh_model *model,
 			  struct net_buf_simple *buf);
 
 static struct bt_mesh_cfg_srv cfg_srv = {
-	.relay = BT_MESH_RELAY_DISABLED,
+	.relay = BT_MESH_RELAY_ENABLED,
 	.beacon = BT_MESH_BEACON_ENABLED,
 #if defined(CONFIG_BT_MESH_FRIEND)
 	.frnd = BT_MESH_FRIEND_ENABLED,
@@ -48,7 +61,7 @@ static struct bt_mesh_cfg_srv cfg_srv = {
 #else
 	.gatt_proxy = BT_MESH_GATT_PROXY_NOT_SUPPORTED,
 #endif
-	.default_ttl = 7,
+	.default_ttl = 2,
 
 	/* 3 transmissions with 20ms interval */
 	.net_transmit = BT_MESH_TRANSMIT(2, 20),
@@ -81,7 +94,6 @@ static struct bt_mesh_model root_models[] = {
 	BT_MESH_MODEL_CFG_SRV(&cfg_srv),
 //	BT_MESH_MODEL_HEALTH_SRV(&health_srv, &health_pub),
 	BT_MESH_MODEL(BT_MESH_MODEL_ID_GEN_ONOFF_SRV, gen_onoff_srv_op,
-		
 		      &gen_onoff_pub_srv, NULL),
 };
 
@@ -117,12 +129,29 @@ static void gen_onoff_set_unack(struct bt_mesh_model *model,
 				struct net_buf_simple *buf)
 {
 	struct net_buf_simple *msg = model->pub->msg;
+	struct mb_display *disp = mb_display_get();
 	int err;
 	u8_t  temp;
 
 	temp = net_buf_simple_pull_u8(buf);
-	printk("Set_Unack: addr 0x%02x state 0x%02x\n",
-       bt_mesh_model_elem(model)->addr, temp);
+	printk("Set_Unack: addr 0x%02x state 0x%02x temp %d\n",
+    	   bt_mesh_model_elem(model)->addr, temp, temp);
+
+	if (temp == 1)
+	{
+//		mb_display_image(disp, MB_DISPLAY_MODE_DEFAULT, K_FOREVER, &arrow, 1);
+		mb_display_image(disp, MB_DISPLAY_MODE_SINGLE, K_FOREVER,
+			 &open, 1);
+//		printk("Display\n");
+//		mb_display_print(disp, MB_DISPLAY_MODE_DEFAULT | MB_DISPLAY_FLAG_LOOP,
+//			 K_FOREVER, "1");
+	}
+	else
+	{
+		mb_display_image(disp, MB_DISPLAY_MODE_SINGLE, K_FOREVER,
+			 &close, 1);
+	}
+
 }
 
 static void gen_onoff_set(struct bt_mesh_model *model,

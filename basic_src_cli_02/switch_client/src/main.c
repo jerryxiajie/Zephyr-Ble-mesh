@@ -14,8 +14,9 @@
 #include <bluetooth/mesh.h>
 #include <board.h>
 #include <gpio.h>
+// #include <display/mb_display.h>
 
-#include "board.h"
+// #include "board.h"
 
 // GPIO for the buttons
 #define PIN_A SW0_GPIO_PIN
@@ -30,6 +31,18 @@ static struct gpio_callback gpio_btnB_cb;
 static struct k_work buttonA_work;
 static struct k_work buttonB_work;
 
+// static struct mb_image open = MB_IMAGE({ 0, 0, 1, 0, 0 },
+// 					 { 0, 1, 1, 0, 0 },
+// 					 { 0, 0, 1, 0, 0 },
+// 					 { 0, 0, 1, 0, 0 },
+// 					 { 0, 1, 1, 1, 0 });
+
+// static struct mb_image close = MB_IMAGE({ 0, 0, 0, 0, 0 },
+// 					 { 0, 0, 0, 0, 0 },
+// 					 { 0, 0, 0, 0, 0 },
+// 					 { 0, 0, 0, 0, 0 },
+// 					 { 0, 0, 0, 0, 0 });
+
 /* Model Operation Codes */
 #define BT_MESH_MODEL_OP_GEN_ONOFF_GET		BT_MESH_MODEL_OP_2(0x82, 0x01)
 #define BT_MESH_MODEL_OP_GEN_ONOFF_SET		BT_MESH_MODEL_OP_2(0x82, 0x02)
@@ -41,7 +54,7 @@ static void gen_onoff_status(struct bt_mesh_model *model,
 			  struct net_buf_simple *buf);
 
 static struct bt_mesh_cfg_srv cfg_srv = {
-	.relay = BT_MESH_RELAY_DISABLED,
+	.relay = BT_MESH_RELAY_ENABLED,
 	.beacon = BT_MESH_BEACON_ENABLED,
 #if defined(CONFIG_BT_MESH_FRIEND)
 	.frnd = BT_MESH_FRIEND_ENABLED,
@@ -53,19 +66,19 @@ static struct bt_mesh_cfg_srv cfg_srv = {
 #else
 	.gatt_proxy = BT_MESH_GATT_PROXY_NOT_SUPPORTED,
 #endif
-	.default_ttl = 7,
+	.default_ttl = 5,
 
 	/* 3 transmissions with 20ms interval */
-	.net_transmit = BT_MESH_TRANSMIT(2, 20),
-	.relay_retransmit = BT_MESH_TRANSMIT(2, 20),
+	.net_transmit = BT_MESH_TRANSMIT(5, 20),
+	.relay_retransmit = BT_MESH_TRANSMIT(5, 20),
 };
 
 BT_MESH_MODEL_PUB_DEFINE(gen_onoff_pub_cli, NULL, 2 + 2);
 
-
 static u8_t trans_id;
 static u16_t primary_addr;
 static u16_t primary_net_idx;
+// struct mb_display *disp = mb_display_get();
 
 static const struct bt_mesh_model_op gen_onoff_cli_op[] = {
 	{ BT_MESH_MODEL_OP_GEN_ONOFF_STATUS, 1, gen_onoff_status },
@@ -99,9 +112,6 @@ static void gen_onoff_status(struct bt_mesh_model *model,
 {
 	u8_t	state;
 
-	// state = net_buf_simple_pull_u8(buf);
-	// printk("get_state = %d \n",state);
-
 	net_buf_simple_pull_u8(buf);
 	state = net_buf_simple_pull_u8(buf);
 
@@ -111,32 +121,28 @@ static void gen_onoff_status(struct bt_mesh_model *model,
 
 void send_message(u8_t temp)
 {
-	// struct bt_mesh_model *mod_cli, *mod_srv;
-	// struct bt_mesh_model_pub *pub_cli, *pub_srv;
 	struct bt_mesh_model *mod_cli;
 	struct bt_mesh_model_pub *pub_cli;
 	int err;
-	// u8_t get_state;
 
 	mod_cli = &root_models[1];
 	pub_cli = mod_cli->pub;
 
 	printk("publish to 0x%04x,onoff 0x%04x\n",
 	       pub_cli->addr, temp);
-	bt_mesh_model_msg_init(pub_cli->msg,BT_MESH_MODEL_OP_GEN_ONOFF_SET);
+
+	if (temp == 1)
+	{
+		printk("Open!\n");
+	}
+	else
+	{
+		printk("Close!\n");
+	}
+
+	bt_mesh_model_msg_init(pub_cli->msg,BT_MESH_MODEL_OP_GEN_ONOFF_SET_UNACK);
 	net_buf_simple_add_u8(pub_cli->msg, temp);
 	net_buf_simple_add_u8(pub_cli->msg, trans_id++);
-
-/*
-	get_state = net_buf_simple_pull_u8(pub_cli->msg);
-	printk("get_state = %d \n",get_state);
-	get_state = net_buf_simple_pull_u8(pub_cli->msg);
-	printk("get_state = %d \n",get_state);
-	get_state = net_buf_simple_pull_u8(pub_cli->msg);
-	printk("get_state = %d \n",get_state);
-	get_state = net_buf_simple_pull_u8(pub_cli->msg);
-	printk("get_state = %d \n",get_state);
-*/
 
 	err = bt_mesh_model_publish(mod_cli);
 	if (err) {
@@ -160,23 +166,15 @@ void button_A_pressed(struct device *gpiob, struct gpio_callback *cb,
 											u32_t pins)
 {
 	k_work_submit(&buttonA_work);
+	// send_message(1);
 }
 
 void button_B_pressed(struct device *gpiob, struct gpio_callback *cb,
 											u32_t pins)
 {
 	k_work_submit(&buttonB_work);
-
-//	printk("Button B pressed at %d\n", k_cycle_get_32());
+	// send_message(0);
 }
-
-
-// static int output_number(bt_mesh_output_action_t action, uint32_t number)
-// {
-// 	printk("OOB Number: %u\n", number);
-
-// 	return 0;
-// }
 
 static void prov_complete(u16_t net_idx, u16_t addr)
 {
@@ -225,8 +223,6 @@ static void bt_ready(int err)
 	}
 
 	printk("Bluetooth initialized\n");
-
-	board_init();
 
 	err = bt_mesh_init(&prov, &comp);
 	if (err) {
